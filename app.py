@@ -1,7 +1,7 @@
 import os
 import time
 import streamlit as st
-import google import genai
+from google import genai
 from google.genai import types, errors
 
 
