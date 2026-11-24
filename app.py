@@ -1,54 +1,88 @@
-import os
-import time
+
 import streamlit as st
 from google import genai
-from google.genai import types, errors
+from google.genai import types
 
+# Page configuration
+st.set_page_config(
+    page_title="CHABO AI",
+    page_icon="🤖",
+    layout="centered"
+)
 
-def main() -> None:
-    if not os.environ.get("GEMINI_API_KEY"):
-        print("Error: GEMINI_API_KEY environment variable is not set.")
-        print('Run: export GEMINI_API_KEY="your-api-key-here"')
-        sys.exit(1)
+# App title
+st.title("🤖 CHABO AI")
+st.caption("Your friendly AI assistant")
 
-    client = genai.Client()
+# Get API key from Streamlit Secrets
+try:
+    api_key = st.secrets["GEMINI_API_KEY"]
+except Exception:
+    st.error("GEMINI_API_KEY is missing from Streamlit Secrets.")
+    st.stop()
 
-    chat = client.chats.create(
-        model="gemini-3.5-flash-lite",
-        config=types.GenerateContentConfig(
-            system_instruction=(
-                "You are CHABO AI, a helpful, clear, and friendly AI assistant "
-                "that can answer questions on any topic."
-            ),
-            temperature=0.7,
-        ),
+# Initialize Gemini client
+client = genai.Client(api_key=api_key)
+
+# Initialize chat history
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+
+# Display previous messages
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
+
+# Chat input
+user_input = st.chat_input("Ask CHABO AI anything...")
+
+if user_input:
+    # Display user message
+    st.session_state.messages.append(
+        {"role": "user", "content": user_input}
     )
 
-    print("=========================================")
-    print("  CHABO AI is online! Ask anything.")
-    print("  Type 'exit' or 'quit' to end the chat.")
-    print("=========================================\n")
+    with st.chat_message("user"):
+        st.markdown(user_input)
 
-    while True:
-        try:
-            user_input = input("You: ").strip()
-        except (KeyboardInterrupt, EOFError):
-            print("\nCHABO AI: Goodbye! See you next time.")
-            break
+    # Generate AI response
+    with st.chat_message("assistant"):
+        with st.spinner("CHABO AI is thinking..."):
+            try:
+                response = client.models.generate_content(
+                    model="gemini-3.5-flash-lite",
+                    contents=[
+                        {
+                            "role": "user",
+                            "parts": [
+                                {
+                                    "text": (
+                                        "You are CHABO AI, a helpful, "
+                                        "clear, and friendly AI assistant "
+                                        "that can answer questions "
+                                        "on any topic.\n\n"
+                                        + "\n".join(
+                                            f"{m['role']}: {m['content']}"
+                                            for m in st.session_state.messages
+                                        )
+                                    )
+                                }
+                            ]
+                        }
+                    ],
+                    config=types.GenerateContentConfig(
+                        temperature=0.7
+                    )
+                )
 
-        if not user_input:
-            continue
+                answer = response.text or "I couldn't generate a response."
 
-        if user_input.lower() in {"exit", "quit"}:
-            print("CHABO AI: Goodbye! See you next time.")
-            break
+                st.markdown(answer)
 
-        try:
-            response = chat.send_message(user_input)
-            print(f"\nCHABO AI: {response.text}\n")
-        except Exception as exc:
-            print(f"\n[Error communicating with CHABO AI: {exc}]\n")
+                st.session_state.messages.append(
+                    {"role": "assistant", "content": answer}
+                )
 
-
-if __name__ == "__main__":
-    main()
+            except Exception as e:
+                st.error(f"An error occurred: {e}")
+            
